@@ -1,0 +1,22 @@
+#! /usr/bin/env python2.7
+
+import sys
+
+if __name__ == '__main__':
+	import argparse
+	
+	example = '\n'.join([
+						'(e.g)',
+						'	server_exe start|stop|restart|status',
+						'	server_exe stasrt --debug'])
+	
+	parser = argparse.ArgumentParser()
+	parser.parse_args()
+	
+	total = len(sys.argv)
+	cmdargs = str(sys.argv)
+	
+	print total
+	
+	for arg in sys.argv:
+		print "arg : %s" % str(arg)
