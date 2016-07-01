@@ -1,22 +1,107 @@
 #! /usr/bin/env python2.7
 
 import sys
+import os
+import subprocess
+import time
+import signal
+IP_PORT = '0.0.0.0:8077'
+BASE_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
+
+class Process(object):
+
+	def __init__(self, pid, cmds):
+		setattr(self, 'pid', pid)
+		self._cmds = cmds
+
+	def cmdline(self):
+		return self._cmds
+
+def processlist():
+	plist = []
+	process = subprocess.Popen(['ps', '-eo', 'pid, args'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	stdout, _stderr = process.communicate()
+	for line in stdout.splitlines():
+		sp = line.strip().split(' ')
+		pid, cmds = sp[0], sp[1:]
+		if 'server.py' in cmds and IP_PORT in cmds:
+			proc = Process(int(pid), cmds)
+			plist.append(proc)
+	return plist
+
+def start(debug=False):
+	plist = processlist()
+	if plist:
+		for proc in plist:
+			sys.stderr.write('server is already running [pid : %s]\n' % proc.pid)
+		return
+
+	pwd = os.getcwd()
+	os.chdir(BASE_DIR)
+	cmds = ['nohup','python','server.py', IP_PORT]
+	if debug:
+		cmds.append('--debug')
+	cmds.append('&')
+
+	p = subprocess.Popen(' '.join(cmds), shell=True)
+	_ = p.wait()
+	time.sleep(0.5)
+	plist = processlist()
+	for proc in plist:
+		sys.stderr.write('runserver is running [pid : %s]\n' % proc.pid)
+	os.chdir(pwd)
+
+def stop():
+	plist = processlist()
+	for proc in plist:
+		sys.stdout.write('kill pid %s\n' % proc.pid)
+		os.kill(proc.pid, signal.SIGKILL)
+
+def status():
+	plist = processlist()
+	for proc in plist:
+		cmds = proc.cmdline()
+		sys.stdout.write('%s [pid %s]\n' % (' '.join(cmds),proc.pid))
+
+
+def app_handler(args):
+	dic = vars(args)
+	sub = dic.get('subname', None)
+	debug = dic.get('debug', False)
+	if sub == 'start':
+		start(debug)
+	elif sub == 'stop':
+		stop()
+	elif sub == 'restart':
+		stop()
+		start(debug)
+	elif sub == 'status':
+		status()
 
 if __name__ == '__main__':
 	import argparse
 	
 	example = '\n'.join([
-						'(e.g)',
-						'	server_exe start|stop|restart|status',
-						'	server_exe stasrt --debug'])
+		'(e.g)',
+		'	server_exe start|stop|restart|status',
+		'	server_exe stasrt --debug'])
 	
-	parser = argparse.ArgumentParser()
-	parser.parse_args()
-	
-	total = len(sys.argv)
-	cmdargs = str(sys.argv)
-	
-	print total
-	
-	for arg in sys.argv:
-		print "arg : %s" % str(arg)
+	parser = argparse.ArgumentParser(
+		prog='server_exe',
+		description=example,
+		formatter_class=argparse.RawDescriptionHelpFormatter
+	)
+	parser.add_argument('-v', '--version', action='version', version='1.0.0')
+	subparser = parser.add_subparsers(dest='subname')
+
+	parser_start = subparser.add_parser('start', help='start')
+	parser_start.add_argument('-d', '--debug', action='store_true')
+
+	parser_restart = subparser.add_parser('restart', help='restart')
+	parser_restart.add_argument('-d', '--debug', action='store_true')
+
+	subparser.add_parser('stop', help='stop')
+	subparser.add_parser('status', help='status')
+
+	args= parser.parse_args()
+	app_handler(args)
